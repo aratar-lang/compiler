@@ -1,6 +1,6 @@
-use std::process;
-use std::iter::Peekable;
 use std::io::prelude::*;
+use std::iter::Peekable;
+use std::process;
 
 use crate::{CharStream, Token, TokenString};
 
@@ -8,6 +8,7 @@ use crate::{CharStream, Token, TokenString};
 pub(super) struct LexicalAnalyzer<R: Read> {
     chars: Peekable<CharStream<R>>,
     line: usize,
+    lastsep: bool,
 }
 
 impl<R: Read> LexicalAnalyzer<R> {
@@ -15,11 +16,13 @@ impl<R: Read> LexicalAnalyzer<R> {
         LexicalAnalyzer {
             chars: chars.peekable(),
             line: 1,
+            lastsep: true,
         }
     }
 
     // Skip stuff until no more whitespace, comments, etc.
-    fn skip(&mut self) {
+    fn skip(&mut self) -> bool {
+        let mut newline = false;
         'skip: while let Some(ch) = self.chars.peek() {
             match ch {
                 ' ' => { /* ignore spaces */ }
@@ -34,17 +37,21 @@ impl<R: Read> LexicalAnalyzer<R> {
                                 }
                                 break 'rem_delim;
                             }
-                            _ => { self.chars.next(); }
+                            _ => {
+                                self.chars.next();
+                            }
                         }
                     }
                 }
                 '\n' => {
+                    newline = true;
                     self.line += 1;
                 }
-                _ => { break 'skip }
+                _ => break 'skip,
             }
             self.chars.next();
         }
+        newline
     }
 
     // Parse a base 10 number that could have a fractional component.
@@ -62,9 +69,7 @@ impl<R: Read> LexicalAnalyzer<R> {
             self.chars.next();
         }
         let mut frac = match self.chars.next() {
-            Some(d) if d.is_ascii_digit() => {
-                d as u128 - '0' as u128
-            }
+            Some(d) if d.is_ascii_digit() => d as u128 - '0' as u128,
             _ => {
                 eprintln!("Decimal points must be followed by a digit");
                 eprintln!("See line {}", self.line);
@@ -77,7 +82,7 @@ impl<R: Read> LexicalAnalyzer<R> {
                     frac = frac * 10 + (*d as u128 - '0' as u128);
                 }
                 '_' => { /* ignore */ }
-                _ => break
+                _ => break,
             }
             self.chars.next();
         }
@@ -98,7 +103,7 @@ impl<R: Read> LexicalAnalyzer<R> {
         }
         Token::Int(value)
     }
-    
+
     fn base_two(&mut self, start: char) -> Token {
         let mut value = start as u128 - '0' as u128;
         while let Some(digit) = self.chars.peek() {
@@ -113,7 +118,7 @@ impl<R: Read> LexicalAnalyzer<R> {
         }
         Token::Int(value)
     }
-    
+
     fn ident(&mut self, start: char) -> Token {
         let mut ident = [0u8; 32];
         ident[0] = start as u8;
@@ -123,8 +128,11 @@ impl<R: Read> LexicalAnalyzer<R> {
             match ch {
                 c if c.is_ascii_alphabetic() || *c == '_' => {
                     if c.is_ascii_uppercase() && fail_uppercase {
-                        eprintln!("Invalid identifier: forbidden \
-                            lowerCamelCase on line {}!", self.line);
+                        eprintln!(
+                            "Invalid identifier: forbidden \
+                            lowerCamelCase on line {}!",
+                            self.line
+                        );
                         process::exit(1);
                     }
                     ident[index] = *c as u8;
@@ -140,6 +148,77 @@ impl<R: Read> LexicalAnalyzer<R> {
         }
         Token::Ident(TokenString(ident))
     }
+
+    fn operator(
+        &mut self,
+        symbol: char,
+        op: Token,
+        op_assign: Token,
+        op_set: Token,
+        op_set_assign: Token,
+    ) -> Token {
+        match self.chars.peek() {
+            Some(':') => {
+                self.chars.next();
+                op_assign
+            }
+            Some(c) if *c == symbol => {
+                self.chars.next();
+                if self.chars.peek() == Some(&':') {
+                    self.chars.next();
+                    op_set_assign
+                } else {
+                    op_set
+                }
+            }
+            _ => op,
+        }
+    }
+    
+    fn dash(&mut self) -> Token {
+        match self.chars.peek() {
+            Some(':') => {
+                self.chars.next();
+                Token::SubAssign
+            }
+            Some('>') => {
+                self.chars.next();
+                Token::Eval
+            }
+            Some('-') => {
+                self.chars.next();
+                if self.chars.peek() == Some(&':') {
+                    self.chars.next();
+                    Token::TruncAssign
+                } else {
+                    Token::Trunc
+                }
+            }
+            _ => Token::Sub,
+        }
+    }
+    
+    fn text(&mut self) -> Token {
+        let mut text = "".to_string();
+        while let Some(ch) = self.chars.peek() {
+            match ch {
+                '"' => {
+                    self.chars.next();
+                    if self.chars.peek() == Some(&'"') {
+                        self.chars.next();
+                        text.push('"');
+                        continue;
+                    }
+                    break;
+                },
+                _ => {
+                    text.push(*ch);
+                }
+            }
+            self.chars.next();
+        }
+        Token::Text(text)
+    }
 }
 
 impl<R: Read> Iterator for LexicalAnalyzer<R> {
@@ -147,7 +226,11 @@ impl<R: Read> Iterator for LexicalAnalyzer<R> {
 
     fn next(&mut self) -> Option<Self::Item> {
         // Skip stuff until no more spaces, comments, etc.
-        self.skip();
+        if self.skip() && !self.lastsep {
+            self.lastsep = true;
+            return Some(Token::Separator);
+        }
+        self.lastsep = false;
         // Get first character
         let ch = if let Some(ch) = self.chars.next() {
             ch
@@ -155,73 +238,113 @@ impl<R: Read> Iterator for LexicalAnalyzer<R> {
             return None;
         };
         match ch {
-            '&' => {
-                match self.chars.peek() {
-                    Some(':') => {
-                        self.chars.next();
-                        Some(Token::AndAssign)
-                    },
-                    Some('&') => {
-                        self.chars.next();
-                        if self.chars.peek() == Some(&':') {
-                            self.chars.next();
-                            Some(Token::AndSetAssign)
-                        } else {
-                            Some(Token::AndSet)
-                        }
-                    },
-                    _ => Some(Token::And),
+            '&' => Some(self.operator(
+                '&',
+                Token::And,
+                Token::AndAssign,
+                Token::AndSet,
+                Token::AndSetAssign,
+            )),
+            '|' => Some(self.operator(
+                '|',
+                Token::Ior,
+                Token::IorAssign,
+                Token::IorSet,
+                Token::IorSetAssign,
+            )),
+            '~' => Some(self.operator(
+                '~',
+                Token::Xor,
+                Token::XorAssign,
+                Token::XorSet,
+                Token::XorSetAssign,
+            )),
+            '*' => Some(self.operator(
+                '*',
+                Token::Mul,
+                Token::MulAssign,
+                Token::DotProduct,
+                Token::DotProductAssign,
+            )),
+            '/' => Some(self.operator(
+                '/',
+                Token::Div,
+                Token::DivAssign,
+                Token::DivInt,
+                Token::DivIntAssign,
+            )),
+            '+' => Some(self.operator(
+                '+',
+                Token::Add,
+                Token::AddAssign,
+                Token::Concat,
+                Token::ConcatAssign,
+            )),
+            '-' => Some(self.dash()),
+            '@' => Some(Token::Ref),
+            '.' => Some(Token::Access),
+            ':' => Some(Token::Assign),
+            '(' => Some(Token::Paren(true)),
+            ')' => Some(Token::Paren(false)),
+            '[' => Some(Token::Bracket(true)),
+            ']' => Some(Token::Bracket(false)),
+            '{' => Some(Token::Brace(true)),
+            '}' => Some(Token::Brace(false)),
+            ',' => {
+                if !self.lastsep {
+                    self.lastsep = true;
+                    Some(Token::Separator)
+                } else {
+                    self.next()
                 }
             }
-            '@' => Some(Token::Ref),
+            '"' => Some(self.text()),
             d if d.is_ascii_digit() => Some(self.base_ten(d)),
-            a if a.is_ascii_alphabetic() || a == '_' => {
-                match self.chars.peek().map(|b| *b) {
-                    Some(c) if c.is_ascii_lowercase() || c == '_' => {
-                        Some(self.ident(a))
-                    }
-                    Some(c) if c.is_ascii_alphanumeric() => {
-                        match a {
-                            'x' => {
-                                Some(self.base_sixteen(c))
-                            }
-                            'f' => {
-                                if c.is_ascii_digit() {
-                                    Some(self.base_ten(c))
-                                } else {
-                                    eprintln!("Malformed Number!");
-                                    process::exit(1);
-                                }
-                            }
-                            'b' => {
-                                if c == '1' || c == '0' {
-                                    Some(self.base_two(c))
-                                } else {
-                                    eprintln!("Malformed Number!");
-                                    process::exit(1);
-                                }
-                            }
-                            _ => {
-                                eprintln!("Unknown number format on line {}!", self.line);
+            a if a.is_ascii_alphabetic() || a == '_' => match self.chars.peek().map(|b| *b) {
+                Some(c)
+                    if (c.is_ascii_digit() || c.is_ascii_uppercase()) && a.is_ascii_lowercase() =>
+                {
+                    match a {
+                        'x' => Some(self.base_sixteen(c)),
+                        'f' => {
+                            if c.is_ascii_digit() {
+                                Some(self.base_ten(c))
+                            } else {
+                                eprintln!("Malformed Number!");
                                 process::exit(1);
                             }
                         }
-
-                    }
-                    None => {
-                        let mut ident = [0; 32];
-                        ident[0] = a as u8;
-                        Some(Token::Ident(TokenString(ident)))
-                    }
-                    _ => {
-                        eprintln!("Invalid character in identifier on line {}", self.line);
-                        process::exit(1);
+                        'b' => {
+                            if c == '1' || c == '0' {
+                                Some(self.base_two(c))
+                            } else {
+                                eprintln!("Malformed Number!");
+                                process::exit(1);
+                            }
+                        }
+                        _ => {
+                            eprintln!("Unknown number format on line {}!", self.line);
+                            process::exit(1);
+                        }
                     }
                 }
-            }
+                Some(c) if c.is_ascii_alphabetic() || c == '_' => Some(self.ident(a)),
+                None => {
+                    let mut ident = [0; 32];
+                    ident[0] = a as u8;
+                    Some(Token::Ident(TokenString(ident)))
+                }
+                _ => {
+                    eprintln!("Invalid character in identifier on line {}", self.line);
+                    process::exit(1);
+                }
+            },
             w if w.is_whitespace() => {
-                eprintln!("Invalid whitespace on line {}, only spaces and \
-                    newlines allowed.", self.line);
+                eprintln!(
+                    "Invalid whitespace on line {}, only spaces and \
+                    newlines allowed.",
+                    self.line
+                );
                 process::exit(1);
             }
             c => {

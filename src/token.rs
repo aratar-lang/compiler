@@ -14,14 +14,60 @@ pub(super) enum Token {
     Int(u128),
     // A decimal
     Dec(u128, u128),
+    // A text literal
+    Text(String),
 
+    // 1-character tokens
+    Access,    // .
+    Ref,       // @
+    Separator, // , \n
+    Assign,    // :
+    Paren(bool),
+    Bracket(bool),
+    Brace(bool),
+    
     //
-    Ref, // @
+    Eval, // ->
 
     // And tokens
-    And, // &
-    AndAssign, // &:
-    AndSet, // &&
+    And,          // &
+    AndAssign,    // &:
+    AndSet,       // &&
     AndSetAssign, // &&:
+
+    // Inclusive Or tokens
+    Ior,          // |
+    IorAssign,    // |:
+    IorSet,       // ||
+    IorSetAssign, // ||:
+
+    // Exclusive Or tokens
+    Xor,          // ~
+    XorAssign,    // ~:
+    XorSet,       // ~~
+    XorSetAssign, // ~~:
+
+    // Addition tokens
+    Add,          // +
+    AddAssign,    // +:
+    Concat,       // ++
+    ConcatAssign, // ++:
+
+    // Subtraction tokens
+    Sub,          // -
+    SubAssign,    // -:
+    Trunc,        // --
+    TruncAssign,  // --:
     
+    // Multiplication tokens
+    Mul,              // *
+    MulAssign,        // *:
+    DotProduct,       // **
+    DotProductAssign, // **:
+    
+    // Division tokens
+    Div,              // /
+    DivAssign,        // /:
+    DivInt,           // //
+    DivIntAssign,     // //:
 }

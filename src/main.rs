@@ -1,21 +1,21 @@
 use std::env;
 use std::fs::File;
-use std::process;
 use std::io::BufReader;
+use std::process;
 
-mod lexical_analyzer;
 mod char_stream;
+mod lexical_analyzer;
 mod token;
 
 use char_stream::CharStream;
-use token::{Token, TokenString};
 use lexical_analyzer::LexicalAnalyzer;
+use token::{Token, TokenString};
 
 fn main() -> std::io::Result<()> {
     let mut args = env::args().skip(1);
 
     let filename = if let Some(arg) = args.next() {
-        eprintln!("Compiling file: '{}'...",arg);
+        eprintln!("Compiling file: '{}'...", arg);
         arg
     } else {
         eprintln!("Need to pass file name!");
