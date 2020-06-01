@@ -4,4 +4,9 @@ pub(super) enum Token {
     Ident(),
     // A number
     Number(),
+    
+    // And tokens
+    And,
+    AndAssign,
+    AndSet,
 }

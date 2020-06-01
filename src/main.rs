@@ -27,10 +27,10 @@ fn main() -> std::io::Result<()> {
 
     let chars = CharStream::new(buf_reader);
     let lexa = LexicalAnalyzer::new(chars);
-    
+
     for token in lexa {
         println!("{:?}", token);
     }
-    
+
     Ok(())
 }
