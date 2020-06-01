@@ -2,7 +2,7 @@ use std::process;
 use std::iter::Peekable;
 use std::io::prelude::*;
 
-use crate::{CharStream, Token};
+use crate::{CharStream, Token, TokenString};
 
 // An iterator over lexemes in a character stream.
 pub(super) struct LexicalAnalyzer<R: Read> {
@@ -138,7 +138,7 @@ impl<R: Read> LexicalAnalyzer<R> {
                 process::exit(1);
             }
         }
-        Token::Ident(ident)
+        Token::Ident(TokenString(ident))
     }
 }
 
@@ -176,9 +176,9 @@ impl<R: Read> Iterator for LexicalAnalyzer<R> {
             '@' => Some(Token::Ref),
             d if d.is_ascii_digit() => Some(self.base_ten(d)),
             a if a.is_ascii_alphabetic() || a == '_' => {
-                match self.chars.next() {
-                    Some(c) if c.is_ascii_lowercase() || a == '_' => {
-                        Some(self.ident(c))
+                match self.chars.peek().map(|b| *b) {
+                    Some(c) if c.is_ascii_lowercase() || c == '_' => {
+                        Some(self.ident(a))
                     }
                     Some(c) if c.is_ascii_alphanumeric() => {
                         match a {
@@ -211,7 +211,7 @@ impl<R: Read> Iterator for LexicalAnalyzer<R> {
                     None => {
                         let mut ident = [0; 32];
                         ident[0] = a as u8;
-                        Some(Token::Ident(ident))
+                        Some(Token::Ident(TokenString(ident)))
                     }
                     _ => {
                         eprintln!("Invalid character in identifier on line {}", self.line);

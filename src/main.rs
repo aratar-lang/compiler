@@ -8,7 +8,7 @@ mod char_stream;
 mod token;
 
 use char_stream::CharStream;
-use token::Token;
+use token::{Token, TokenString};
 use lexical_analyzer::LexicalAnalyzer;
 
 fn main() -> std::io::Result<()> {
