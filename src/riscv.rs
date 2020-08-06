@@ -117,24 +117,104 @@ impl From<u32> for Reg {
 }
 
 /// An assembly instruction (imm is limited to 12 bits)
+/// One of 47 User mode instructions in the RV32I Base Instruction Set
+/// https://content.riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf
 pub(crate) enum I {
-    /// Load Byte (R[d]: M[R[s] + imm])
+    /// U: Set upper 20 bits to immediate value
+    LUI { d: Reg, imm: u32 },
+    /// U: Add upper 20 bits to immediate value in program counter
+    AUIPC { d: Reg, imm: u32 },
+    /// UJ: Jump and Link
+    JAL { d: Reg, imm: u32 },
+    /// I: Jump and Link, Register
+    JALR { d: Reg, s: Reg, imm: u16 },
+    /// SB: 12-bit immediate offset Branch on Equal
+    BEQ { s1: Reg, s2: Reg, imm: u16 },
+    /// SB: 12-bit immediate offset Branch on Not Equal
+    BNE { s1: Reg, s2: Reg, imm: u16 },
+    /// SB: 12-bit immediate offset Branch on Less Than
+    BLT { s1: Reg, s2: Reg, imm: u16 },
+    /// SB: 12-bit immediate offset Branch on Greater Than Or Equal To
+    BGE { s1: Reg, s2: Reg, imm: u16 },
+    /// SB: 12-bit immediate offset Branch on Less Than (Unsigned)
+    BLTU { s1: Reg, s2: Reg, imm: u16 },
+    /// SB: 12-bit immediate offset Branch on Greater Than Or Equal To (Unsigned)
+    BGEU { s1: Reg, s2: Reg, imm: u16 },
+    /// I: Load Byte (R[d]: M[R[s] + imm])
     LB { d: Reg, s: Reg, imm: u16 },
-    /// Load Half-Word (R[d]: M[R[s] + imm])
+    /// I: Load Half-Word (R[d]: M[R[s] + imm])
     LH { d: Reg, s: Reg, imm: u16 },
-    /// Load Word (R[d]: M[R[s] + imm])
+    /// I: Load Word (R[d]: M[R[s] + imm])
     LW { d: Reg, s: Reg, imm: u16 },
-    /// Load Byte Unsigned (R[d]: M[R[s] + imm])
+    /// I: Load Byte Unsigned (R[d]: M[R[s] + imm])
     LBU { d: Reg, s: Reg, imm: u16 },
-    /// Load Half Unsigned (R[d]: M[R[s] + imm])
+    /// I: Load Half Unsigned (R[d]: M[R[s] + imm])
     LHU { d: Reg, s: Reg, imm: u16 },
-    /// Add Immediate (R[d]: R[s] + imm)
+    /// S: Store Byte
+    SB { s1: Reg, s2: Reg, imm: u16 },
+    /// S: Store Half Word
+    SH { s1: Reg, s2: Reg, imm: u16 },
+    /// S: Store Word
+    SW { s1: Reg, s2: Reg, imm: u16 },
+    /// I: Add Immediate (R[d]: R[s] + imm)
     ADDI { d: Reg, s: Reg, imm: u16 },
-    
-    /// Add (R[d]: R[s1] + R[s2])
+    /// I: Set 1 on Less Than, 0 Otherwise Immediate
+    SLTI { d: Reg, s: Reg, imm: u16 },
+    /// I: Set 1 on Less Than, 0 Otherwise Immediate Unsigned
+    SLTUI { d: Reg, s: Reg, imm: u16 },
+    /// I: Xor Immediate
+    XORI { d: Reg, s: Reg, imm: u16 },
+    /// I: Or Immediate
+    ORI { d: Reg, s: Reg, imm: u16 },
+    /// I: And Immediate
+    ANDI { d: Reg, s: Reg, imm: u16 },
+    /// I: Logical Left Shift Immediate
+    SLLI { d: Reg, s: Reg, imm: u16 },
+    /// I: Logical Right Shift Immediate
+    SRLI { d: Reg, s: Reg, imm: u16 },
+    /// I: Arithmetic Shift Right Immediate (See SRA).
+    SRAI { d: Reg, s: Reg, imm: u16 },
+    /// R: Add (R[d]: R[s1] + R[s2])
     ADD { d: Reg, s1: Reg, s2: Reg },
-    /// Subtract (R[d]: R[s1] - R[s2])
+    /// R: Subtract (R[d]: R[s1] - R[s2])
     SUB { d: Reg, s1: Reg, s2: Reg },
+    /// R: Logical Left Shift
+    SLL { d: Reg, s1: Reg, s2: Reg },
+    /// R: Set 1 on Less Than, 0 Otherwise
+    SLT { d: Reg, s1: Reg, s2: Reg },
+    /// R: Set 1 on Less Than, 0 Otherwise Unsigned
+    SLTU { d: Reg, s1: Reg, s2: Reg },
+    /// R: Xor
+    XOR { d: Reg, s1: Reg, s2: Reg },
+    /// R: Logical Right Shift
+    SRL { d: Reg, s1: Reg, s2: Reg },
+    /// R: Arithmetic Shift Right (Sign Bit Copied Rather Than Filling In Zeros)
+    SRA { d: Reg, s1: Reg, s2: Reg },
+    /// R: Or
+    OR { d: Reg, s1: Reg, s2: Reg },
+    /// R: And
+    AND { d: Reg, s1: Reg, s2: Reg },
+    /// I: Invoke a system call (Registers defined by ABI, not hardware)
+    ECALL { },
+    /// I: Debugger Breakpoint
+    EBREAK { },
+
+    /*/// Enforce memory access ordering in multithreaded context.
+    FENCE
+    /// Wait for instruction memory stores complete.
+    FENCEI,
+    /// 
+    CSRRW,
+    /// 
+    CSRRWI,
+    /// 
+    CSRRC,
+    /// 
+    CSRRCI,
+    /// 
+    CSRRS,
+    /// 
+    CSRRSI,*/
 }
 
 impl I {
@@ -189,6 +269,33 @@ impl I {
         let imm = (instruction >> 20) as u16;
         (d, funct3, s, imm)
     }
+    
+    /// - imm_h:  7
+    /// - src2:   5
+    /// - src1:   5
+    /// - funct3: 3
+    /// - imm_l:  5
+    /// - opcode  7
+    fn s(opcode: u32, funct3: u32, s1: Reg, s2: Reg, imm: u16) -> u32 {
+        let imm: u32 = imm.into();
+        let src1: u32 = (s1 as u8).into();
+        let src2: u32 = (s2 as u8).into();
+        let mut out = opcode;
+        out |= (imm & 0b11111) << 7;
+        out |= funct3 << 12;
+        out |= src1 << 15;
+        out |= src2 << 20;
+        out |= (imm >> 5) << 25;
+        out
+    }
+    fn from_s(instruction: u32) -> (u32, Reg, Reg, u16) {
+        let mut imm = ((instruction & (0b11111 << 7)) >> 7) as u16;
+        let funct3 = (instruction & (0b111 << 12)) >> 12;
+        let s1 = Reg::from((instruction & (0b11111 << 15)) >> 15);
+        let s2 = Reg::from((instruction & (0b11111 << 20)) >> 20);
+        imm |= ((instruction >> 25) as u16) << 5;
+        (funct3, s1, s2, imm)
+    }
 }
 
 impl From<I> for u32 {
@@ -200,6 +307,9 @@ impl From<I> for u32 {
             LBU { d, s, imm } => I::i(0b0000011, d, 0b100, s, imm),
             LHU { d, s, imm } => I::i(0b0000011, d, 0b101, s, imm),
             ADDI { d, s, imm } => I::i(0b0010011, d, 0b000, s, imm),
+            SB { s1, s2, imm } => I::s(0b0100011, 0b000, s1, s2, imm),
+            SH { s1, s2, imm } => I::s(0b0100011, 0b001, s1, s2, imm),
+            SW { s1, s2, imm } => I::s(0b0100011, 0b010, s1, s2, imm),
             ADD { d, s1, s2 } => I::r(0b0110011, d, 0b000, s1, s2, 0b0000000),
             SUB { d, s1, s2 } => I::r(0b0110011, d, 0b000, s1, s2, 0b0100000),
         }
@@ -217,6 +327,13 @@ impl From<u32> for I {
                 (d, 0b100, s, imm) => LBU { d, s, imm },
                 (d, 0b101, s, imm) => LHU { d, s, imm },
                 (_, funct, _, _mm) => panic!("Unknown funct3: {}", funct),
+            },
+            // Store To RAM
+            0b0100011 => match I::from_s(with) {
+                (0b000, s1, s2, imm) => SB { s1, s2, imm },
+                (0b001, s1, s2, imm) => SH { s1, s2, imm },
+                (0b010, s1, s2, imm) => SW { s1, s2, imm },
+                (funct, _1, _2, _mm) => panic!("Unknown funct3: {}", funct),
             },
             // Immediate Arithmetic
             0b0010011 => match I::from_i(with) {
