@@ -6,6 +6,7 @@ use std::process;
 mod char_stream;
 mod lexical_analyzer;
 mod token;
+mod riscv;
 
 use char_stream::CharStream;
 use lexical_analyzer::LexicalAnalyzer;
