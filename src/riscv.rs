@@ -169,11 +169,11 @@ pub(crate) enum I {
     /// I: And Immediate
     ANDI { d: Reg, s: Reg, imm: u16 },
     /// I: Logical Left Shift Immediate
-    SLLI { d: Reg, s: Reg, imm: u16 },
+    SLLI { d: Reg, s: Reg, imm: u8 },
     /// I: Logical Right Shift Immediate
-    SRLI { d: Reg, s: Reg, imm: u16 },
+    SRLI { d: Reg, s: Reg, imm: u8 },
     /// I: Arithmetic Shift Right Immediate (See SRA).
-    SRAI { d: Reg, s: Reg, imm: u16 },
+    SRAI { d: Reg, s: Reg, imm: u8 },
     /// R: Add (R[d]: R[s1] + R[s2])
     ADD { d: Reg, s1: Reg, s2: Reg },
     /// R: Subtract (R[d]: R[s1] - R[s2])
@@ -270,6 +270,33 @@ impl I {
         (d, funct3, s, imm)
     }
     
+    /// - funct7: 7
+    /// - imm:    5
+    /// - src:    5
+    /// - funct3: 3
+    /// - dst:    5
+    /// - opcode  7
+    fn i7(opcode: u32, d: Reg, funct3: u32, s: Reg, imm: u8, funct7: u32) -> u32 {
+        let imm: u32 = imm.into();
+        let dst: u32 = (d as u8).into();
+        let src: u32 = (s as u8).into();
+        let mut out = opcode;
+        out |= dst << 7;
+        out |= funct3 << 12;
+        out |= src << 15;
+        out |= imm << 20;
+        out |= funct7 << 25;
+        out
+    }
+    fn from_i7(instruction: u32) -> (Reg, u32, Reg, u8, u32) {
+        let d = Reg::from((instruction & (0b11111 << 7)) >> 7);
+        let funct3 = (instruction & (0b111 << 12)) >> 12;
+        let s = Reg::from((instruction & (0b11111 << 15)) >> 15);
+        let imm = ((instruction & (0b11111 << 20)) >> 20) as u8;
+        let funct7 = instruction >> 25;
+        (d, funct3, s, imm, funct7)
+    }
+    
     /// - imm_h:  7
     /// - src2:   5
     /// - src1:   5
@@ -296,22 +323,66 @@ impl I {
         imm |= ((instruction >> 25) as u16) << 5;
         (funct3, s1, s2, imm)
     }
+    
+    /// - imm:    20
+    /// - dst:    5
+    /// - opcode  7
+    fn u(opcode: u32, d: Reg, imm: u32) -> u32 {
+        let dst: u32 = (d as u8).into();
+        let mut out = opcode;
+        out |= dst << 7;
+        out |= imm << 12;
+        out
+    }
+    fn from_u(instruction: u32) -> (Reg, u32) {
+        let d = Reg::from((instruction & (0b11111 << 7)) >> 7);
+        let imm = instruction >> 12;
+        (d, imm)
+    }
 }
 
 impl From<I> for u32 {
     fn from(with: I) -> Self {
         match with {
+            LUI { d, imm } => I::u(0b0110111, d, imm),
+            AUIPC { d, imm } => I::u(0b0010111, d, imm),
+            JAL { d, imm } => I::u(0b1101111, d, imm),
+            JALR { d, s, imm } => I::i(0b1100111, d, 0b000, s, imm),
+            BEQ { s1, s2, imm } => I::s(0b1100011, 0b000, s1, s2, imm),
+            BNE { s1, s2, imm } => I::s(0b1100011, 0b001, s1, s2, imm),
+            BLT { s1, s2, imm } => I::s(0b1100011, 0b100, s1, s2, imm),
+            BGE { s1, s2, imm } => I::s(0b1100011, 0b101, s1, s2, imm),
+            BLTU { s1, s2, imm } => I::s(0b1100011, 0b110, s1, s2, imm),
+            BGEU { s1, s2, imm } => I::s(0b1100011, 0b111, s1, s2, imm),
             LB { d, s, imm } => I::i(0b0000011, d, 0b000, s, imm),
             LH { d, s, imm } => I::i(0b0000011, d, 0b001, s, imm),
             LW { d, s, imm } => I::i(0b0000011, d, 0b010, s, imm),
             LBU { d, s, imm } => I::i(0b0000011, d, 0b100, s, imm),
             LHU { d, s, imm } => I::i(0b0000011, d, 0b101, s, imm),
             ADDI { d, s, imm } => I::i(0b0010011, d, 0b000, s, imm),
+            SLTI { d, s, imm } => I::i(0b0010011, d, 0b010, s, imm),
+            SLTUI { d, s, imm } => I::i(0b0010011, d, 0b011, s, imm),
+            XORI { d, s, imm } => I::i(0b0010011, d, 0b100, s, imm),
+            ORI { d, s, imm } => I::i(0b0010011, d, 0b110, s, imm),
+            ANDI { d, s, imm } => I::i(0b0010011, d, 0b111, s, imm),
+            SLLI { d, s, imm } => I::i7(0b0010011, d, 0b001, s, imm, 0b0000000),
+            SRLI { d, s, imm } => I::i7(0b0010011, d, 0b101, s, imm, 0b0000000),
+            SRAI { d, s, imm } => I::i7(0b0010011, d, 0b101, s, imm, 0b0100000),
             SB { s1, s2, imm } => I::s(0b0100011, 0b000, s1, s2, imm),
             SH { s1, s2, imm } => I::s(0b0100011, 0b001, s1, s2, imm),
             SW { s1, s2, imm } => I::s(0b0100011, 0b010, s1, s2, imm),
             ADD { d, s1, s2 } => I::r(0b0110011, d, 0b000, s1, s2, 0b0000000),
             SUB { d, s1, s2 } => I::r(0b0110011, d, 0b000, s1, s2, 0b0100000),
+            SLL { d, s1, s2 } => I::r(0b0110011, d, 0b001, s1, s2, 0b0000000),
+            SLT { d, s1, s2 } => I::r(0b0110011, d, 0b010, s1, s2, 0b0000000),
+            SLTU { d, s1, s2 } => I::r(0b0110011, d, 0b011, s1, s2, 0b0000000),
+            XOR { d, s1, s2 } => I::r(0b0110011, d, 0b100, s1, s2, 0b0000000),
+            SRL { d, s1, s2 } => I::r(0b0110011, d, 0b101, s1, s2, 0b0000000),
+            SRA { d, s1, s2 } => I::r(0b0110011, d, 0b101, s1, s2, 0b0100000),
+            OR { d, s1, s2 } => I::r(0b0110011, d, 0b110, s1, s2, 0b0000000),
+            AND { d, s1, s2 } => I::r(0b0110011, d, 0b111, s1, s2, 0b0000000),
+            ECALL { } => I::i(0b1110011, ZERO, 0b000, ZERO, 0b000000000000),
+            EBREAK { } => I::i(0b1110011, ZERO, 0b000, ZERO, 0b000000000001),
         }
     }
 }
@@ -338,13 +409,64 @@ impl From<u32> for I {
             // Immediate Arithmetic
             0b0010011 => match I::from_i(with) {
                 (d, 0b000, s, imm) => ADDI { d, s, imm },
-                (_, funct, _, _mm) => panic!("Unknown funct3: {}", funct),
+                (d, 0b010, s, imm) => SLTI { d, s, imm },
+                (d, 0b011, s, imm) => SLTUI { d, s, imm },
+                (d, 0b100, s, imm) => XORI { d, s, imm },
+                (d, 0b110, s, imm) => ORI { d, s, imm },
+                (d, 0b111, s, imm) => ANDI { d, s, imm },
+                _ => match I::from_i7(with) {
+                    (d, 0b001, s, imm, 0b0000000) => SLLI { d, s, imm },
+                    (d, 0b101, s, imm, 0b0000000) => SRLI { d, s, imm },
+                    (d, 0b101, s, imm, 0b0100000) => SRAI { d, s, imm },
+                    (_, funct, _, _, _) => panic!("Unknown funct3: {}", funct),
+                },
+            },
+            // Add Upper Immediate To Program Counter
+            0b0010111 => match I::from_u(with) {
+                (d, imm) => AUIPC { d, imm },
             },
             // Register Arithmetic
             0b0110011 => match I::from_r(with) {
                 (d, 0b000, s1, s2, 0b0000000) => ADD { d, s1, s2 },
-                (d, 0b000, s1, s2, 0b0000001) => SUB { d, s1, s2 },
+                (d, 0b000, s1, s2, 0b0100000) => SUB { d, s1, s2 },
+                (d, 0b001, s1, s2, 0b0000000) => SLL { d, s1, s2 },
+                (d, 0b010, s1, s2, 0b0000000) => SLT { d, s1, s2 },
+                (d, 0b011, s1, s2, 0b0000000) => SLTU { d, s1, s2 },
+                (d, 0b100, s1, s2, 0b0000000) => XOR { d, s1, s2 },
+                (d, 0b101, s1, s2, 0b0000000) => SRL { d, s1, s2 },
+                (d, 0b101, s1, s2, 0b0100000) => SRA { d, s1, s2 },
+                (d, 0b110, s1, s2, 0b0000000) => OR { d, s1, s2 },
+                (d, 0b111, s1, s2, 0b0000000) => AND { d, s1, s2 },
                 (_, f3, _1, _2, f7) => panic!("Unknown F3:{} F7:{}", f3, f7),
+            },
+            // Load upper immediate
+            0b0110111 => match I::from_u(with) {
+                (d, imm) => LUI { d, imm },
+            },
+            // Branch on Condition
+            0b1100011 => match I::from_s(with) {
+                (0b000, s1, s2, imm) => BEQ { s1, s2, imm },
+                (0b001, s1, s2, imm) => BNE { s1, s2, imm },
+                (0b100, s1, s2, imm) => BLT { s1, s2, imm },
+                (0b101, s1, s2, imm) => BGE { s1, s2, imm },
+                (0b110, s1, s2, imm) => BLTU { s1, s2, imm },
+                (0b111, s1, s2, imm) => BGEU { s1, s2, imm },
+                (funct, _1, _2, _mm) => panic!("Unknown funct3: {}", funct),
+            },
+            // Jump and link register
+            0b1100111 => match I::from_i(with) {
+                (d, 0b000, s, imm) => JALR { d, s, imm },
+                (_d, f3, _s, _imm) => panic!("Unknown F3:{}", f3),
+            },
+            // Jump and Link
+            0b1101111 => match I::from_u(with) {
+                (d, imm) => JAL { d, imm },
+            },
+            // Transfer Control
+            0b1110011 => match I::from_i(with) {
+                (ZERO, 0b000, ZERO, 0b000000000000) => ECALL { },
+                (ZERO, 0b000, ZERO, 0b000000000001) => EBREAK { },
+                _ => panic!("Unknown Environment Control Transfer"),
             },
             o => panic!("Failed to parse RISC-V Assembly, Unknown Opcode {}", o),
         }
