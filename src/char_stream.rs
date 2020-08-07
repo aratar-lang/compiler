@@ -18,7 +18,7 @@ impl<R: Read> Iterator for CharStream<R> {
         let mut c = [0u8; 4];
         let mut ch = None;
         for i in 0..4 {
-            if let Err(_) = self.reader.read_exact(&mut c[i..i + 1]) {
+            if self.reader.read_exact(&mut c[i..i + 1]).is_err() {
                 if i == 0 {
                     return None;
                 }

@@ -133,6 +133,7 @@ impl From<u32> for Reg {
 }
 
 /// An assembly instruction (imm is limited to 12 bits)
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum I {
     //// One of 40 User mode instructions in the RV32I Base Instruction Set ////
     /// U: Set upper 20 bits to immediate value
@@ -400,6 +401,8 @@ impl From<I> for u32 {
 }
 
 impl From<u32> for I {
+    // Using match makes it easier to extend code in the future.
+    #[allow(clippy::match_single_binding)]
     fn from(with: u32) -> Self {
         match with & 0b1111111 {
             // Load From RAM
@@ -421,7 +424,7 @@ impl From<u32> for I {
                 (0b000, s1, s2, imm) => SB { s1, s2, imm },
                 (0b001, s1, s2, imm) => SH { s1, s2, imm },
                 (0b010, s1, s2, imm) => SW { s1, s2, imm },
-                (funct, _1, _2, _mm) => panic!("Unknown funct3: {}", funct),
+                (funct, _s, _z, _mm) => panic!("Unknown funct3: {}", funct),
             },
             // Immediate Arithmetic
             0b0010011 => match I::from_i(with) {
@@ -454,7 +457,7 @@ impl From<u32> for I {
                 (d, 0b101, s1, s2, 0b0100000) => SRA { d, s1, s2 },
                 (d, 0b110, s1, s2, 0b0000000) => OR { d, s1, s2 },
                 (d, 0b111, s1, s2, 0b0000000) => AND { d, s1, s2 },
-                (_, f3, _1, _2, f7) => panic!("Unknown F3:{} F7:{}", f3, f7),
+                (_, f3, _s, _z, f7) => panic!("Unknown F3:{} F7:{}", f3, f7),
             },
             // Load upper immediate
             0b0110111 => match I::from_u(with) {
@@ -468,7 +471,7 @@ impl From<u32> for I {
                 (0b101, s1, s2, imm) => BGE { s1, s2, imm },
                 (0b110, s1, s2, imm) => BLTU { s1, s2, imm },
                 (0b111, s1, s2, imm) => BGEU { s1, s2, imm },
-                (funct, _1, _2, _mm) => panic!("Unknown funct3: {}", funct),
+                (funct, _s, _z, _mm) => panic!("Unknown funct3: {}", funct),
             },
             // Jump and link register
             0b1100111 => match I::from_i(with) {

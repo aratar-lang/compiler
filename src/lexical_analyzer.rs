@@ -232,11 +232,7 @@ impl<R: Read> Iterator for LexicalAnalyzer<R> {
         }
         self.lastsep = false;
         // Get first character
-        let ch = if let Some(ch) = self.chars.next() {
-            ch
-        } else {
-            return None;
-        };
+        let ch = self.chars.next()?;
         match ch {
             '&' => Some(self.operator(
                 '&',
@@ -300,7 +296,7 @@ impl<R: Read> Iterator for LexicalAnalyzer<R> {
             }
             '"' => Some(self.text()),
             d if d.is_ascii_digit() => Some(self.base_ten(d)),
-            a if a.is_ascii_alphabetic() || a == '_' => match self.chars.peek().map(|b| *b) {
+            a if a.is_ascii_alphabetic() || a == '_' => match self.chars.peek().copied() {
                 Some(c)
                     if (c.is_ascii_digit() || c.is_ascii_uppercase()) && a.is_ascii_lowercase() =>
                 {
