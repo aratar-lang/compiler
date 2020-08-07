@@ -5,8 +5,8 @@ use std::process;
 
 mod char_stream;
 mod lexical_analyzer;
-mod token;
 mod riscv;
+mod token;
 
 use char_stream::CharStream;
 use lexical_analyzer::LexicalAnalyzer;

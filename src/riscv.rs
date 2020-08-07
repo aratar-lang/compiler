@@ -1,4 +1,20 @@
-//! RISC-V 32-Bit Base Integer Instructions to compile into.
+//! RISC-V 32-Bit Base Integer Instructions to compile into, with optional
+//! extensions that can be enabled.
+//! - RV32M Multiply Extension
+//! - RV32A Atomic Extension
+//! - RV32F Single-Precision Floating Point Extension
+//! - RV32D Double-Precision Floating Point Extension
+//! -
+//! # Ignored For Now
+//! - RV32Q Quadruple-Precision Floating Point Extension
+//! - RV32C Compression 16-bit Instructions
+//! - All 64 bit extensions
+//!
+//! May be ported to other platforms with assembly translators.
+//!
+//! # Syscalls
+//! Syscalls will need to be replaced with other code in order to run outside of
+//! the virtual machine.
 
 // NOTES
 // - For speed: Make sure all data is aligned
@@ -117,9 +133,8 @@ impl From<u32> for Reg {
 }
 
 /// An assembly instruction (imm is limited to 12 bits)
-/// One of 47 User mode instructions in the RV32I Base Instruction Set
-/// https://content.riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf
 pub(crate) enum I {
+    //// One of 40 User mode instructions in the RV32I Base Instruction Set ////
     /// U: Set upper 20 bits to immediate value
     LUI { d: Reg, imm: u32 },
     /// U: Add upper 20 bits to immediate value in program counter
@@ -195,26 +210,23 @@ pub(crate) enum I {
     /// R: And
     AND { d: Reg, s1: Reg, s2: Reg },
     /// I: Invoke a system call (Registers defined by ABI, not hardware)
-    ECALL { },
+    ECALL {},
     /// I: Debugger Breakpoint
-    EBREAK { },
+    EBREAK {},
+    /// I: Fence (Immediate Is Made Up Of Ordered High Order To Low Order Bits:)
+    /// - fm(4), PI(1), PO(1), PR(1), PW(1), SI(1), SO(1), SR(1), SW(1)
+    FENCE { imm: u16 },
+    //// Multiply Extension ////
 
-    /*/// Enforce memory access ordering in multithreaded context.
-    FENCE
-    /// Wait for instruction memory stores complete.
-    FENCEI,
-    /// 
-    CSRRW,
-    /// 
-    CSRRWI,
-    /// 
-    CSRRC,
-    /// 
-    CSRRCI,
-    /// 
-    CSRRS,
-    /// 
-    CSRRSI,*/
+    //// Atomic Extension ////
+
+    //// Single-Precision Floating Point Extension ////
+
+    //// Double-Precision Floating Point Extension ////
+
+    //// Vector Extension ///
+
+    //// SIMD Extension ////
 }
 
 impl I {
@@ -224,8 +236,7 @@ impl I {
     /// - funct3: 3
     /// - dst:    5
     /// - opcode: 7
-    fn r(opcode: u32, d: Reg, funct3: u32, s1: Reg, s2: Reg, funct7: u32) -> u32
-    {
+    fn r(opcode: u32, d: Reg, funct3: u32, s1: Reg, s2: Reg, funct7: u32) -> u32 {
         let dst: u32 = (d as u8).into();
         let src1: u32 = (s1 as u8).into();
         let src2: u32 = (s2 as u8).into();
@@ -269,7 +280,7 @@ impl I {
         let imm = (instruction >> 20) as u16;
         (d, funct3, s, imm)
     }
-    
+
     /// - funct7: 7
     /// - imm:    5
     /// - src:    5
@@ -296,7 +307,7 @@ impl I {
         let funct7 = instruction >> 25;
         (d, funct3, s, imm, funct7)
     }
-    
+
     /// - imm_h:  7
     /// - src2:   5
     /// - src1:   5
@@ -323,7 +334,7 @@ impl I {
         imm |= ((instruction >> 25) as u16) << 5;
         (funct3, s1, s2, imm)
     }
-    
+
     /// - imm:    20
     /// - dst:    5
     /// - opcode  7
@@ -381,8 +392,9 @@ impl From<I> for u32 {
             SRA { d, s1, s2 } => I::r(0b0110011, d, 0b101, s1, s2, 0b0100000),
             OR { d, s1, s2 } => I::r(0b0110011, d, 0b110, s1, s2, 0b0000000),
             AND { d, s1, s2 } => I::r(0b0110011, d, 0b111, s1, s2, 0b0000000),
-            ECALL { } => I::i(0b1110011, ZERO, 0b000, ZERO, 0b000000000000),
-            EBREAK { } => I::i(0b1110011, ZERO, 0b000, ZERO, 0b000000000001),
+            ECALL {} => I::i(0b1110011, ZERO, 0b000, ZERO, 0b000000000000),
+            EBREAK {} => I::i(0b1110011, ZERO, 0b000, ZERO, 0b000000000001),
+            FENCE { imm } => I::i(0b0001111, ZERO, 0b000, ZERO, imm),
         }
     }
 }
@@ -397,6 +409,11 @@ impl From<u32> for I {
                 (d, 0b010, s, imm) => LW { d, s, imm },
                 (d, 0b100, s, imm) => LBU { d, s, imm },
                 (d, 0b101, s, imm) => LHU { d, s, imm },
+                (_, funct, _, _mm) => panic!("Unknown funct3: {}", funct),
+            },
+            // Misc. Memory Instructions
+            0b0001111 => match I::from_i(with) {
+                (_, 0b000, _, imm) => FENCE { imm },
                 (_, funct, _, _mm) => panic!("Unknown funct3: {}", funct),
             },
             // Store To RAM
@@ -464,8 +481,8 @@ impl From<u32> for I {
             },
             // Transfer Control
             0b1110011 => match I::from_i(with) {
-                (ZERO, 0b000, ZERO, 0b000000000000) => ECALL { },
-                (ZERO, 0b000, ZERO, 0b000000000001) => EBREAK { },
+                (ZERO, 0b000, ZERO, 0b000000000000) => ECALL {},
+                (ZERO, 0b000, ZERO, 0b000000000001) => EBREAK {},
                 _ => panic!("Unknown Environment Control Transfer"),
             },
             o => panic!("Failed to parse RISC-V Assembly, Unknown Opcode {}", o),

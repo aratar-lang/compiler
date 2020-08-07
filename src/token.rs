@@ -25,7 +25,7 @@ pub(super) enum Token {
     Paren(bool),
     Bracket(bool),
     Brace(bool),
-    
+
     //
     Eval, // ->
 
@@ -54,20 +54,20 @@ pub(super) enum Token {
     ConcatAssign, // ++:
 
     // Subtraction tokens
-    Sub,          // -
-    SubAssign,    // -:
-    Trunc,        // --
-    TruncAssign,  // --:
-    
+    Sub,         // -
+    SubAssign,   // -:
+    Trunc,       // --
+    TruncAssign, // --:
+
     // Multiplication tokens
     Mul,              // *
     MulAssign,        // *:
     DotProduct,       // **
     DotProductAssign, // **:
-    
+
     // Division tokens
-    Div,              // /
-    DivAssign,        // /:
-    DivInt,           // //
-    DivIntAssign,     // //:
+    Div,          // /
+    DivAssign,    // /:
+    DivInt,       // //
+    DivIntAssign, // //:
 }

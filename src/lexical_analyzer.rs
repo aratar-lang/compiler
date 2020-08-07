@@ -174,7 +174,7 @@ impl<R: Read> LexicalAnalyzer<R> {
             _ => op,
         }
     }
-    
+
     fn dash(&mut self) -> Token {
         match self.chars.peek() {
             Some(':') => {
@@ -197,7 +197,7 @@ impl<R: Read> LexicalAnalyzer<R> {
             _ => Token::Sub,
         }
     }
-    
+
     fn text(&mut self) -> Token {
         let mut text = "".to_string();
         while let Some(ch) = self.chars.peek() {
@@ -210,7 +210,7 @@ impl<R: Read> LexicalAnalyzer<R> {
                         continue;
                     }
                     break;
-                },
+                }
                 _ => {
                     text.push(*ch);
                 }
