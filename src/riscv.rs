@@ -17,7 +17,64 @@
 //! the virtual machine.
 
 // NOTES
-// - For speed: Make sure all data is aligned
+// - For speed: Make sure all loads and stores are 32-bit aligned
+// - For shifts: Shifting the width of the register is a no-op, to clear
+//   register $R use ADDI $R, $ZERO, 0.
+// Psuedo-Instructions
+// - nop: addi $zero, $zero, 0
+// - mv $d, $s: addi $d, $s, 0
+// - not $d, $s: ori $d, $s, -1
+// - neg $d, $s: sub $d, $zero, $s
+// - j offset: jal $zero, offset (unconditional jump)
+// - jal offset: jal $ra, offset (near function call)
+// - call offset:
+//      auipc $ra, offset[31:12] + offset[11]
+//      jalr $ra, offset[11:0]($ra)
+// - ret: jalr $ra, 0($ra)
+// - beqz $r, offset: beq $r, $zero, offset
+// - bnez $r, offset: bne $r, $zero, offset
+// - bgez $r, offset: bge $r, $zero, offset
+// - bltz $r, offset: blt $r, $zero, offset
+// - bgt $r1, $r2, offset: blt $r2, $r1, offset
+// - ble $r1, $r2, offset: bge $r2, $r1, offset
+// - fence: fence IORW, IORW
+// - li $d, imm: addi $d, $zero, imm (set immediate)
+// - li $d, imm:
+//      lui $d, imm[31:12] + imm[11]
+//      addi $d, $zero, imm[11:0]
+// - la $d, symbol:
+//      auipc $d, delta[31:12] + delta[11]
+//      addi $d, $d, delta[11:0]
+// - lw $d, symbol:
+//      auipc $d, delta[31:12] + delta[11]
+//      lw $d, $d, delta[11:0](rd)
+// - sw $d, symbol, $t:
+//      auipc $t, delta[31:12] + delta[11]
+//      sw $d, $d, delta[11:0]($t)
+// - seqz $d, $s: sltiu $d, $s, 0
+// - snez $d, $s: sltu $d, $zero, $s
+// Custom Pseudo-Instructions
+// - zero $d: addi $r, $zero, 0 (set register to zero)
+// - slt $d, $a, $b, $s: (with multiply cpu feature enabled)
+//      # Option 1:
+//      slt $d, $a, $b
+//      mul $d, $d, $s
+// - slt $d, $a, $b, $s: (without multiply cpu feature enabled)
+//      # Option 1 (branching, ugh):
+//      blt $a, $b, 12 # 12: ④
+//      addi $d, $zero, 0
+//      jal $zero 8 # Skip next instruction
+//      add $d, $zero, $s # ④
+//
+//      # Option 2 (might be faster for without AND with multiply extension):
+//      slt $d, $a, $b
+//      slli $d, $d, 31
+//      srai $d, $d, 31
+//      and $d, $d, $s
+// - slt $d, $a, $b, $s, $e, $t: ($d: if $a < $b { $s } else { $e })
+//      sub $t, $s, $e
+//      slt $d, $a, $b, $t
+//      add $d, $d, $e
 
 use Reg::*;
 use I::*;
