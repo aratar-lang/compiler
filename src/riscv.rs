@@ -13,8 +13,185 @@
 //! May be ported to other platforms with assembly translators.
 //!
 //! # Syscalls
-//! Syscalls will need to be replaced with other code in order to run outside of
-//! the virtual machine.
+//! Syscalls will need to be translated into other code in order to run outside
+//! of the virtual machine.
+//!
+//! Registers Used:
+//! - a0: (in: Syscall Code, out: evt EventType | buf Addr)
+//! - a1: (in: len Offs, out: len Int32U | res (Int16U, Int16U))
+//! - a2: (in: dat Addr, out: dur Nanos32U)
+//!
+//! ### Core syscalls
+//! - x0: def wait() -> (a0: EventType)
+//! - x1: def info(a1: len, a2: ptr)
+//! - x2: def rand() -> ()
+//! - x3: def adc(a1: analog_storage_id) -> ()
+//! - x4: def pixarray() -> (
+//!       a0~pixels: Addr, a1~res: (w: Int16U, h: Int16U), a2~dur: Nanos32U
+//!   )
+//! - x5: def speaker() -> (
+//!       a0~samples: Addr, a1~res: Int32U, a2~dur: Nanos32U
+//!   )
+//! - x6: def camera() -> (
+//!       a0~pixels: Addr, a1~res: (w: Int16U, h: Int16U), a2~dur: Nanos32U
+//!   )
+//! - x7: def microphone() -> (a0: Addr, a1~len: Int32U, a2~dur: Nanos32U)
+//! - x8: def digital_gpio() -> (a0~buf: Addr[Bit], a1~len: Int32U)
+//! - x9: def analog_gpio() -> (a0~buf: Addr[Fix1_31], a1~len: Int32U)
+//! - xA: def digital_is_out() -> (a0~buf: Addr[Bit], a1~len: Int32U)
+//! - XB: def analog_is_out() -> (a0~buf: Addr[Bit], a1~len: Int32U)
+//!
+//! ## EventType: Bin32
+//! - UserInput: x0
+//!   - Keyboard: x0
+//!     - Quit(Escape)/Tilde/NotSign/Power: 0x00
+//!     - One/Bang/InvertedBang/LatinMode: 0x01
+//!     - Two/At/Squared/ChineseCangjieMode: 0x02
+//!     - Three/Pound/Pound/JapaneseOyayubiShifutoMode: 0x03
+//!     - Four/Dollar/CurrencySign/KoreanDubeolsikMode: 0x04
+//!     - Five/Percent/Euro/GeorgianPhoneticMode: 0x05
+//!     - Six/Caret/Trademark/GreekCodepointMode: 0x06
+//!     - Seven/Ampersand/Cent/HebrewArabicCyrillicMode: 0x07
+//!     - Eight/Asterisk/Ruble/ArmenianPhoneticMode: 0x08
+//!     - Nine/LParens/Yen/TamazightMode: 0x09
+//!     - Zero/RParens/LaoMode: 0x0A
+//!     - Minus/Underscore: 0x0B
+//!     - Plus/Equal: 0x0C
+//!     - Backspace/Delete: 0x0D
+//!     - Tab/UnTab: 0x10
+//!     - q/Q: 0x11
+//!     - w/W: 0x12
+//!     - e/E: 0x13
+//!     - r/R: 0x14
+//!     - t/T: 0x15
+//!     - y/Y: 0x16
+//!     - u/U: 0x17
+//!     - i/I: 0x18
+//!     - o/O: 0x19
+//!     - p/P: 0x1A
+//!     - LSquare/LBrace: 0x1B
+//!     - LSquare/LBrace: 0x1C
+//!     - Backslash/Bar: 0x1D
+//!     - Compose/Search: 0x20
+//!     - a/A: 0x21
+//!     - s/S: 0x22
+//!     - d/D: 0x23
+//!     - f/F: 0x24
+//!     - g/G: 0x25
+//!     - h/H: 0x26
+//!     - j/J: 0x27
+//!     - k/K: 0x28
+//!     - l/L: 0x29
+//!     - Semicolon/Colon: 0x2A
+//!     - Apostrophe/Quote: 0x2B
+//!     - Enter/UnEnter: 0x2C
+//!     - LShift: 0x30
+//!     - z/Z: 0x32
+//!     - x/X: 0x33
+//!     - c/C: 0x34
+//!     - v/V: 0x35
+//!     - b/B: 0x36
+//!     - n/N: 0x37
+//!     - m/M: 0x38
+//!     - Comma/LessThan: 0x39
+//!     - Period/MoreThan: 0x3A
+//!     - Slash/Question: 0x3B
+//!     - ArrowUp: 0x3C
+//!     - Shift: 0x3D
+//!     - Control: 0x40
+//!     - Clipboard: 0x41
+//!     - System: 0x42
+//!     - Alt: 0x43
+//!     - Space: 0x45
+//!     - AltGraph: 0x48
+//!     - VolumeDown: 0x49
+//!     - VolumeUp: 0x4A
+//!     - ArrowLeft: 0x4B
+//!     - ArrowDown: 0x4C
+//!     - ArrowRight: 0x4D
+//!   - Mouse: x1
+//!     - ButtonLeft: 0x00 (Bool)
+//!     - ButtonMiddle: 0x01 (Bool)
+//!     - ButtonRight: 0x02 (Bool)
+//!     - ButtonSide: 0x03 (Bool)
+//!     - ButtonDpi: 0x04 (Bool)
+//!     - MoveX: 0x80 (Int16U)
+//!     - MoveY: 0x81 (Int16U)
+//!     - ScrollX: 0x90 (Int16U)
+//!     - ScrollY: 0x91 (Int16U)
+//!   - Touchscreen: x2
+//!     - TouchX: 0x0 (Int4U, Int16U)
+//!     - TouchY: 0x1 (Int4U, Int16U)
+//!     - Release: 0xF
+//!   - Touchpad: x3
+//!     - ButtonLeft: 0x00 (Bool)
+//!     - ButtonMiddle: 0x01 (Bool)
+//!     - ButtonRight: 0x02 (Bool)
+//!     - MoveX: 0x80 (Int16U)
+//!     - MoveY: 0x81 (Int16U)
+//!     - ScrollX: 0x90 (Int16U)
+//!     - ScrollY: 0x91 (Int16U)
+//!   - Gamepad: x4
+//!     - ButtonLTrigger: 0x00 (Bool)
+//!     - ButtonRTrigger 0x01 (Bool)
+//!     - ButtonLBumper: 0x02 (Bool)
+//!     - ButtonRBumper: 0x03 (Bool)
+//!     - ButtonLStick: 0x04 (Bool)
+//!     - ButtonRStick: 0x05 (Bool)
+//!     - ButtonLMenu: 0x06 (Bool)
+//!     - ButtonRMenu: 0x07 (Bool)
+//!     - ButtonDpadUp: 0x08 (Bool)
+//!     - ButtonDpadLeft: 0x09 (Bool)
+//!     - ButtonDpadRight: 0x0A (Bool)
+//!     - ButtonDpadDown: 0x0B (Bool)
+//!     - ButtonV: 0x0C (Bool)
+//!     - ButtonA: 0x0D (Bool)
+//!     - ButtonB: 0x0E (Bool)
+//!     - ButtonH: 0x0F (Bool)
+//!     - ButtonPaddleL: 0x10 (Bool)
+//!     - ButtonPaddleR: 0x11 (Bool)
+//!     - AxisMainStickX: 0x80 (Int16U)
+//!     - AxisMainStickY: 0x81 (Int16U)
+//!     - AxisAltStickX: 0x82 (Int16U)
+//!     - AxisAltStickY: 0x83 (Int16U)
+//!     - AxisLTrigger: 0x84 (Int16U)
+//!     - AxisRTrigger: 0x85 (Int16U)
+//! - Custom Circuit Input: x1
+//!   - Gpio: x0
+//!     - Digital: x00
+//!     - Analog: x01
+//!     - Pwm: x02
+//!   - Bus: x1
+//!     - I2c: x00
+//!     - Spi: x01
+//!     - Can: x02
+//!     - Pci: x03
+//!     - Sada: xFF
+//! - Media Input: x2
+//!   - Camera: x0
+//!     - Capture: x00
+//!   - Microphone: x1
+//!     - Capture: x00
+//! - Defined Ciruit Input: x3
+//!   - TimerTick: x0
+//!   - GPS: x1
+//!   - Accelerometer: x2
+//!   - Gyro: x3
+//!   - StorageDrive: x4
+//!   - BatterySensor: xF
+//! - Random: x6
+//!   - Ready: x0
+//! - Network Input: x7
+//!   - WifiEthernetData: x0
+//!   - Bluetooth: x1
+//!   - Cell: x2
+//!     - Text: x00
+//!     - Call: x01
+//!     - TextMedia: x02
+//!   - Ble: x3
+//! - Media Output: xA
+//!   - ScreenRefresh: x0
+//!   - SpeakerRefresh: x1
 
 // NOTES
 // - For speed: Make sure all loads and stores are 32-bit aligned
@@ -27,7 +204,7 @@
 // - neg $d, $s: sub $d, $zero, $s
 // - j offset: jal $zero, offset (unconditional jump)
 // - jal offset: jal $ra, offset (near function call)
-// - call offset:
+// - call offset: (far function call)
 //      auipc $ra, offset[31:12] + offset[11]
 //      jalr $ra, offset[11:0]($ra)
 // - ret: jalr $ra, 0($ra)
@@ -71,6 +248,11 @@
 //      slli $d, $d, 31
 //      srai $d, $d, 31
 //      and $d, $d, $s
+// - slt $d, $a, $b, $s, $e: ($d: if $a < $b { $s } else { $e })
+//      sub $s, $s, $e
+//      slt $d, $a, $b, $s
+//      add $d, $d, $e
+//      add $s, $s, $e # can be elimated if s is dropped
 // - slt $d, $a, $b, $s, $e, $t: ($d: if $a < $b { $s } else { $e })
 //      sub $t, $s, $e
 //      slt $d, $a, $b, $t
