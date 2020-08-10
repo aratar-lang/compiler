@@ -22,28 +22,44 @@
 //! - a2: (in: dat Addr, out: dur Nanos32U)
 //!
 //! ### Core syscalls
-//! - x0: def wait() -> (a0: EventType)
-//! - x1: def info(a1: len, a2: ptr)
-//! - x2: def rand() -> ()
-//! - x3: def adc(a1: analog_storage_id) -> ()
-//! - x4: def pixarray() -> (
-//!       a0~pixels: Addr, a1~res: (w: Int16U, h: Int16U), a2~dur: Nanos32U
-//!   )
-//! - x5: def speaker() -> (
-//!       a0~samples: Addr, a1~res: Int32U, a2~dur: Nanos32U
-//!   )
-//! - x6: def camera() -> (
-//!       a0~pixels: Addr, a1~res: (w: Int16U, h: Int16U), a2~dur: Nanos32U
-//!   )
-//! - x7: def microphone() -> (a0: Addr, a1~len: Int32U, a2~dur: Nanos32U)
-//! - x8: def digital_gpio() -> (a0~buf: Addr[Bit], a1~len: Int32U)
-//! - x9: def analog_gpio() -> (a0~buf: Addr[Fix1_31], a1~len: Int32U)
-//! - xA: def digital_is_out() -> (a0~buf: Addr[Bit], a1~len: Int32U)
-//! - XB: def analog_is_out() -> (a0~buf: Addr[Bit], a1~len: Int32U)
+//! ```
+//! a0: (
+//!     syscall_id: Hex8 (behavior: Hex4, variant: Hex4),
+//!     uses_a0: Bin1
+//!     uses_a1: Bin1
+//!     uses_a2: Bin1
+//!     uses_a3: Bin1
+//!     __reserved: Bin4
+//!     value: Bin16 # limited to 12 bits for address offsets
+//! )
+//! ```
+//! - x0: Blocking [Input] (only one)
+//!   - x0: def wait() -> (a0: EventType)
+//! - x1: Non-Blocking [Output]
+//!   - x0: def info(a1: size, a2: text) -> ()
+//! - x2: Async [Output]
+//!   - x0: def rand() -> () # EventType.Random: x20
+//!   - x1: def adc(a1: analog_storage_id) -> () # EventType.Adc: x21
+//!   - x2: def task(a0~fn_ofs: Addr16S) -> () # EventType.Task: x22
+//! - x3: Mapping [Input/Ouput]
+//!   - x0: def pixarray() -> (
+//!         a0~pixels: Addr, a1~res: (w: Int16U, h: Int16U), a2~dur: Nanos32U
+//!     )
+//!   - x1: def speaker() -> (
+//!         a0~samples: Addr, a1~res: Int32U, a2~dur: Nanos32U
+//!     )
+//!   - x2: def digital_is_out() -> (a0~buf: Addr[Bit], a1~len: Int32U)
+//!   - x3: def analog_is_out() -> (a0~buf: Addr[Bit], a1~len: Int32U)
+//!   - x4: def camera() -> (
+//!         a0~pixels: Addr, a1~res: (w: Int16U, h: Int16U), a2~dur: Nanos32U
+//!     )
+//!   - x5: def microphone() -> (a0: Addr, a1~len: Int32U, a2~dur: Nanos32U)
+//!   - x8: def digital_gpio() -> (a0~buf: Addr[Bit], a1~len: Int32U)
+//!   - x9: def analog_gpio() -> (a0~buf: Addr[Fix1_31], a1~len: Int32U)
 //!
 //! ## EventType: Bin32
 //! - UserInput: x0
-//!   - Keyboard: x0
+//!   - Keyboard: x0 (lang: [Ascii; 2])
 //!     - Quit(Escape)/Tilde/NotSign/Power: 0x00
 //!     - One/Bang/InvertedBang/LatinMode: 0x01
 //!     - Two/At/Squared/ChineseCangjieMode: 0x02
@@ -109,6 +125,9 @@
 //!     - ArrowLeft: 0x4B
 //!     - ArrowDown: 0x4C
 //!     - ArrowRight: 0x4D
+//!     - TextInput: 0x70-0x7F (utf8: [Byte; 2])
+//!     - \[ReleaseKey\]: 0x8_-0xB_
+//!     - TextInputLong: 0xFF (pre_utf32: [Byte; 2])
 //!   - Mouse: x1
 //!     - ButtonLeft: 0x00 (Bool)
 //!     - ButtonMiddle: 0x01 (Bool)
@@ -120,9 +139,9 @@
 //!     - ScrollX: 0x90 (Int16U)
 //!     - ScrollY: 0x91 (Int16U)
 //!   - Touchscreen: x2
-//!     - TouchX: 0x0 (Int4U, Int16U)
-//!     - TouchY: 0x1 (Int4U, Int16U)
-//!     - Release: 0xF
+//!     - TouchX: 0x00 (Int4U, Int16U)
+//!     - TouchY: 0x01 (Int4U, Int16U)
+//!     - Release: 0x0F ()
 //!   - Touchpad: x3
 //!     - ButtonLeft: 0x00 (Bool)
 //!     - ButtonMiddle: 0x01 (Bool)
@@ -167,20 +186,22 @@
 //!     - Can: x02
 //!     - Pci: x03
 //!     - Sada: xFF
-//! - Media Input: x2
+//! - Async Ready: x2
+//!   - RandomReady: x0
+//!   - AdcReady: x1
+//!   - TaskReady: x2
+//! - Mapped (Media) Input: x3
 //!   - Camera: x0
 //!     - Capture: x00
 //!   - Microphone: x1
 //!     - Capture: x00
-//! - Defined Ciruit Input: x3
+//! - Defined Ciruit Input: x4
 //!   - TimerTick: x0
 //!   - GPS: x1
 //!   - Accelerometer: x2
 //!   - Gyro: x3
 //!   - StorageDrive: x4
 //!   - BatterySensor: xF
-//! - Random: x6
-//!   - Ready: x0
 //! - Network Input: x7
 //!   - WifiEthernetData: x0
 //!   - Bluetooth: x1
@@ -189,7 +210,7 @@
 //!     - Call: x01
 //!     - TextMedia: x02
 //!   - Ble: x3
-//! - Media Output: xA
+//! - Media Output: xB
 //!   - ScreenRefresh: x0
 //!   - SpeakerRefresh: x1
 
